@@ -1,0 +1,171 @@
+#include <Wire.h>
+#include <stdio.h>
+#include <string.h>
+#include <inttypes.h>
+#include "rgb_lcd.h"
+
+/* Declare Alarm */
+const int alarm = 4;
+bool alarmon = false;
+
+// Declare Sensors
+// #define distsensor analogRead(0)
+const int pressureRight = 2;
+const int pressureLeft = 3;
+
+// Ultrasonic
+const int Ultrasonic_Ping = 7;
+const int Ultrasonic_Data = 8;
+
+rgb_lcd lcd;
+
+// Declare Variables
+int count = 10;
+unsigned long distance = 0;
+unsigned long prev_echo_time = 0;
+
+void setup()
+{
+	Serial.begin(9600);
+	
+	pinMode(Ultrasonic_Ping, OUTPUT);
+	pinMode(Ultrasonic_Data, INPUT);
+	// Setting up buttons as inputs
+	pinMode(pressureRight, INPUT);
+	pinMode(pressureLeft, INPUT);
+	// Set up Alarm
+	pinMode(alarm, OUTPUT);
+	digitalWrite(alarm, LOW);
+	digitalWrite(pressureRight, HIGH);
+	digitalWrite(pressureLeft, HIGH);
+	digitalWrite(Ultrasonic_Ping, HIGH);
+	
+	lcd.begin(16,2);
+	lcd.setRGB(0,0,0);
+	
+}
+
+
+void loop()
+{
+	char val;
+	if (Serial.available())
+		val = Serial.read();
+
+	// User specifying the number of pushups to go for
+	if (val =='N') {
+		count = Serial.parseInt();
+		Serial.print(count);
+		Serial.println(" Received!");
+	}
+	if (val == 'S') {
+		alarmon = true;
+		Serial.println("Alarm set!");
+		lcd.write("Let's goa!");
+		lcd.setCursor(0,1);
+		lcd.setCursor(0,1);
+		char buf[12];
+		itoa(count, buf, 10);
+		lcd.write(buf);
+		lcd.write(" pushups to go");
+		lcd.setRGB(255,255,255);
+	}
+	if (count == 0) {
+		alarmon = false;
+	}
+
+	if (alarmon) {
+		static unsigned long blinkmillis = 0;
+		if (millis() - blinkmillis > 100) {
+			blinkmillis = millis();
+			static bool blinkon = false;
+			if(blinkon = !blinkon)
+				digitalWrite(alarm, HIGH);
+			else 
+				digitalWrite(alarm, LOW);
+		}
+	}
+	else {
+		digitalWrite(alarm, LOW);
+	}
+	static unsigned long pastmillis = 0;
+	if (digitalRead(pressureLeft) && alarmon) {
+		PushupCounter();
+		if (millis() - pastmillis > 1000) {
+			pastmillis = millis();
+			Serial.print("Current Distance: ");
+			Serial.println(distance);
+		}
+	}
+
+	
+}
+
+void PushupCounter()
+{
+	static bool wentdown = false;
+	Ping();
+	if (distance < 800) {
+		wentdown = true;
+	}
+	if (wentdown && distance > 1500) {
+		count--;
+		wentdown = false;
+		lcd.clear();
+		if (count > 6) {
+			lcd.write("Let's go!");
+			lcd.setRGB(195,60,0);
+		}
+		else if (count > 2) {
+			lcd.write("Keep it up!");
+			lcd.setRGB(255 - 10*count,10*count,0);
+		}
+		else if (count > 0) {
+			lcd.write("Almost there!");
+			lcd.setRGB(250,0,0);
+		}
+		else {
+			lcd.write("Good morning!");
+			lcd.setRGB(0,255,0);
+			return;
+		}
+		// Set cursor to column 0 row 1 (which is 2nd raw because counting starts from 0)
+		lcd.setCursor(0,1);
+		char buf[12];
+		itoa(count, buf, 10);
+		lcd.write(buf);
+		lcd.write(" pushups remaining . . .");
+		Serial.print("Did ");
+		Serial.print(count);
+		Serial.print(" pushups! Current Distance: ");
+		Serial.println(distance);
+	}
+	
+}
+
+void Ping()
+{
+#ifdef distsensor
+	distance = 5*distsensor;
+	return;
+#endif
+	unsigned long Echo_Time;
+
+	//Ping Ultrasonic
+	//Send the Ultrasonic Range Finder a 10 microsecond pulse per tech spec
+	digitalWrite(Ultrasonic_Ping, HIGH);
+	delayMicroseconds(10);  //The 10 microsecond pause where the pulse in "high"
+	digitalWrite(Ultrasonic_Ping, LOW);
+	//use command pulseIn to listen to Ultrasonic_Data pin to record the
+	//time that it takes from when the Pin goes HIGH until it goes LOW 
+	Echo_Time = pulseIn(Ultrasonic_Data, HIGH, 5000);
+	if (Echo_Time != 0) {
+		prev_echo_time = distance;
+		distance = Echo_Time;
+	}
+
+  
+  
+}
+
+
